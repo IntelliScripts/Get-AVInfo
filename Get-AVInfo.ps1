@@ -1,72 +1,121 @@
 function Get-AVInfo {
     <#
-.SYNOPSIS
-The script looks for and returns many different AVs on a system. It also displays detailed information on either Vipre, Bitdefender, or Windows Defender, depending on the switch you run with the command. The script can also be used to either enable Vipre, or update Vipre, Windows Defender or Bitdefender definitions, as well as test if the machine can reach intellisecure.myvipre.com.
-.DESCRIPTION
-This script first queries the machine for a bunch of different AVs, from a predefined list, by searching installed services. It then uses CIM (or WMI) to retrive any AVs registered with Windows. The script then retrieves more detailed information about the specific AV you specify (Vipre, Bitdefender, or Windows Defender); if nothing is specified, the default is Vipre, unless the 'DefaultOverride' parameter is used. Finally, the script retrieves basic information about the hardware and operating system, often helpful when troubleshooting things like out-of-date definitions. 
-The script can do other things as well, like update definitions for the different antiviruses, as well as other useful checks and actions. For more information about what the script can do, read the README.md file in github (link below), and check out the PowerShell help on the parameters, provided with this script. There are also tests and checks that happen in the background that are not listed here or in the parameter help (but are in the github README.md file), and that only show up in the script results if found to be true. For more on that, you'll have to read through the actual script:)
-Github link: https://github.com/stangh/Get-AVInfo
-.PARAMETER Bitdefender
-Returns detailed information about Bitdefender installed on the system. Cannot be used with Vipre and Windows Defender parameters.
-.PARAMETER UpdateBDDefs
-Updates Bitdefender definitions. Cannot be used with any other parameter.
-.PARAMETER WindowsDefender
-Returns detailed information about Windows Defender installed on the system. Cannot be used with Vipre and Bitdefender parameters.
-When specifiying this parameter, the script will also look for the registry key that disables Windows Defender and prevents it from starting.
-.Parameter UpdateWDDefs
-Updates Windows Defender definitions. Cannot be used with any other parameter.
-.PARAMETER Viper
-Returns detailed information about Vipre installed on the system. This is the default, if no AV is specified. Cannot be used with Bitdefender and Windows Defender parameters.
-When specifiying this parameter, the script will also test that the machine can reach intellisecure.myvipre.com.
-Vipre is the default, when no AV is specified.
-.PARAMETER DefaultOverride
-Overrides the default behavior of retrieving Vipre information, when no other AV is specified. This cannot be used with any parameter other than the 'MachineInfo' parameter.
-.PARAMETER InstallVipre
-Downloads the Vipre installer from our LTShare and runs it.
-.PARAMETER UpdateVipreDefs
-Updates Vipre definitions. Can only be used with the EnableVipre parameter.
-.PARAMETER MachineInfo
-When specifying this parameter, the script checks for hardware and OS information. The script does not perform these checks by default.
-Cannot be used with the 'action' parameters (such as UpdateVipreDefs).
-.PARAMETER EnableVipre
-Enables SBAMSvc. For when the SBAMSvc service is in a disabled state. Can only be used with the UpdateVipreDefs parameter.
-.PARAMETER EnableVipreAP
-Enables Vipre's Active Protection when it is disabled. This does not make changes to the services themselves.
-.PARAMETER RenameDefsFolder
-Renames the definitions folder, for when defs are corrupted. NOTE: The SBAMSvc service must be in a stopped state, or else permission to rename the folder will be denied.
-.PARAMETER CleanWipe
-The script looks for the CleanWipe utility in two different places, and runs it. 
-On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConnect puts it. If the utility is found in that location, PowerShell will move it to 'C:\Windows\Temp\CleanWipe', and then run it from there.
-.EXAMPLE
+    .SYNOPSIS
+    The script looks for and returns many different AVs on a system. It also displays detailed information on either Vipre, Bitdefender, or Windows Defender, depending on the switch you run with the command. The script can also be used to either enable Vipre, or update Vipre, Windows Defender or Bitdefender definitions, as well as test if the machine can reach intellisecure.myvipre.com.
+    .DESCRIPTION
+    This script first queries the machine for a bunch of different AVs, from a predefined list, by searching installed services. It then uses CIM (or WMI) to retrieve any AVs registered with Windows. The script then retrieves more detailed information about the specific AV you specify (Vipre, Bitdefender, or Windows Defender); if nothing is specified, the default is Vipre, unless the 'DefaultOverride' parameter is used. Finally, the script retrieves basic information about the hardware and operating system, often helpful when troubleshooting things like out-of-date definitions.
+    The script can do other things as well, like update definitions for the different antiviruses, as well as other useful checks and actions. For more information about what the script can do, read the README.md file in GitHub (link below), and check out the PowerShell help on the parameters, provided with this script. There are also tests and checks that happen in the background that are not listed here or in the parameter help (but are in the GitHub README.md file), and that only show up in the script results if found to be true. For more on that, you'll have to read through the actual script :)
+    GitHub link: https://github.com/stangh/Get-AVInfo
+    .PARAMETER Bitdefender
+    Returns detailed information about Bitdefender installed on the system. Cannot be used with Vipre and Windows Defender parameters.
+    .PARAMETER UpdateBDDefs
+    Updates Bitdefender definitions. Cannot be used with any other parameter.
+    .PARAMETER WindowsDefender
+    Returns detailed information about Windows Defender installed on the system. Cannot be used with Vipre and Bitdefender parameters.
+    When specifying this parameter, the script will also look for the registry key that disables Windows Defender and prevents it from starting.
+    .PARAMETER UpdateWDDefs
+    Updates Windows Defender definitions. Cannot be used with any other parameter.
+    .PARAMETER Vipre
+    Returns detailed information about Vipre installed on the system. This is the default, if no AV is specified. Cannot be used with Bitdefender and Windows Defender parameters.
+    When specifying this parameter, the script will also test that the machine can reach intellisecure.myvipre.com.
+    Vipre is the default, when no AV is specified.
+    .PARAMETER DefaultOverride
+    Overrides the default behavior of retrieving Vipre information, when no other AV is specified. This cannot be used with any parameter other than the 'MachineInfo' parameter.
+    .PARAMETER InstallVipre
+    Downloads the Vipre installer from our LTShare and runs it.
+    .PARAMETER UpdateVipreDefs
+    Updates Vipre definitions. Can only be used with the EnableVipre parameter.
+    .PARAMETER MachineInfo
+    When specifying this parameter, the script checks for hardware and OS information. The script does not perform these checks by default.
+    Cannot be used with the 'action' parameters (such as UpdateVipreDefs).
+    .PARAMETER EnableVipre
+    Enables SBAMSvc. For when the SBAMSvc service is in a disabled state. Can only be used with the UpdateVipreDefs parameter.
+    .PARAMETER EnableVipreAP
+    Enables Vipre's Active Protection when it is disabled. This does not make changes to the services themselves.
+    .PARAMETER RenameDefsFolder
+    Renames the definitions folder, for when defs are corrupted. NOTE: The SBAMSvc service must be in a stopped state, or else permission to rename the folder will be denied.
+    .PARAMETER CleanWipe
+    The script looks for the CleanWipe utility in two different places, and runs it.
+    On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConnect puts it. If the utility is found in that location, PowerShell will move it to 'C:\Windows\Temp\CleanWipe', and then run it from there.
+    .PARAMETER UninstallVipre
+    Uninstalls Vipre using the built-in uninstaller.
+    .PARAMETER McAfeeUninstall
+    Uninstalls McAfee products using the built-in uninstallers.
+    .PARAMETER McAfeeUninstall_MCPR
+    Uninstalls McAfee using the MCPR (McAfee Consumer Product Removal) Tool.
+    .PARAMETER SophosUninstall
+    Uninstalls Sophos using the built-in uninstaller (assuming tamper protection is not enabled).
+    .PARAMETER CiscoUninstall
+    Uninstalls Cisco Secure Endpoint using the built-in uninstaller.
+    .PARAMETER MalwarebytesUninstall
+    Uninstalls Malwarebytes using the built-in uninstaller.
+    .PARAMETER KasperskyUninstall
+    Uninstalls Kaspersky applications that cannot be removed completely using standard Windows tools.
+    .PARAMETER ESETUninstall
+    Uninstalls ESET Endpoint Antivirus.
+    .PARAMETER UnregisterAV
+    Unregisters AVs from the Windows Security Center.
+    .PARAMETER UnregisterWebroot
+    Unregisters Webroot from the Windows Security Center.
+    .PARAMETER UninstallWebroot
+    Uninstalls Webroot by installing an MSI on top of the existing install then uninstalling with the same MSI right after.
+    .PARAMETER UninstallWebroot1
+    Uninstalls older Webroot software using the CleanWDF tool.
+    .PARAMETER HPWolfUninstall
+    Uninstalls HP Wolf Security products, in a specific order, to avoid issues with the uninstallation process.
+    .PARAMETER OpenIE
+    Opens Internet Explorer.
+    .PARAMETER FindRMM
+    Finds other RMM tools on the machine.
+    .PARAMETER RebootStatus
+    Checks if the machine is pending a reboot.
+    .EXAMPLE
     PS C:\> Get-AVInfo -WindowsDefender
     This retrieves AVs installed on the system, as well as detailed information on Windows Defender.
-.EXAMPLE
+    .EXAMPLE
     PS C:\> Get-AVInfo -Vipre -MachineInfo
     This retrieves AVs installed on the system, as well as detailed information on Vipre.
     Specifying the 'MachineInfo' switch parameter causes the command to perform hardware and OS checks as well.
-.EXAMPLE
+    .EXAMPLE
     PS C:\> Get-AVInfo -EnableVipre
     Running this enables the SBAMSvc service and starts it.
-.EXAMPLE
+    .EXAMPLE
     PS C:\> Get-AVInfo -UpdateBDDefs
     Updates Bitdefender definitions on the machine.
-.INPUTS
-    Inputs (if any)
-.OUTPUTS
-    Output (if any)
-.NOTES
+    .EXAMPLE
+    PS C:\> Get-AVInfo -UninstallVipre
+    Uninstalls Vipre using the built-in uninstaller.
+    .EXAMPLE
+    PS C:\> Get-AVInfo -McAfeeUninstall_MCPR
+    Uninstalls McAfee using the MCPR (McAfee Consumer Product Removal) Tool.
+    .EXAMPLE
+    PS C:\> Get-AVInfo -UnregisterAV
+    Unregisters AVs from the Windows Security Center.
+    .EXAMPLE
+    PS C:\> Get-AVInfo -RebootStatus
+    Checks if the machine is pending a reboot.
+    .EXAMPLE
+    PS C:\> Get-AVInfo -MachineInfo -DefaultOverride
+    This retrieves detailed information about the hardware and operating system of the machine.
+    The 'DefaultOverride' parameter prevents the script from defaulting to retrieving Windows Defender information.
+    .INPUTS
+    None. You cannot pipe objects to this script.
+    .OUTPUTS
+    Various. The script outputs information about the AVs installed on the system, as well as other relevant information.
+    .NOTES
     This script can be run on a machine in Automate, backstage. Simply paste the contents of this function into the shell and press enter, to load the script into memory. Then, just run 'Get-AVInfo', along with whatever parameters, if any, you want to add.
     You can also run "wget -uri 'https://raw.githubusercontent.com/stangh/Get-AVInfo/master/Get-AVInfo.ps1' -UseBasicParsing | iex" to download and load the script into memory.
-    
+    .LINK
+    https://github.com/stangh/Get-AVInfo
     =================================
     Author: Eliyohu Stengel
     Email: estengel@intellicomp.net
     Comments and suggestions welcome!
     =================================
-#>
+    #>
     [CmdletBinding(#SupportsShouldProcess = $True,
         #ConfirmImpact = 'Medium',
-        DefaultParameterSetName = 'Vipre')]
+        DefaultParameterSetName = 'WindowsDefender')]
     param (
         [Parameter(parametersetname = 'Bitdefender',
             Mandatory = $false)]
@@ -223,7 +272,15 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
 
         [Parameter(parametersetname = 'McAfee_Action',
             Mandatory = $false)]
-        [Switch]$McAfeeUninstall1,
+        [Switch]$McAfeeUninstall_MCPR,
+
+        [Parameter(parametersetname = 'Sophos_Action',
+            Mandatory = $false)]
+        [Switch]$SophosUninstall,
+
+        [Parameter(parametersetname = 'Cisco_Action',
+            Mandatory = $false)]
+        [Switch]$CiscoUninstall,
 
         [Parameter(parametersetname = 'Malwarebytes_Action',
             Mandatory = $false)]
@@ -277,6 +334,58 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
     }
     PROCESS {
         Write-Debug "Started PROCESS block"
+        function UninstallApp {
+            [CmdletBinding()]
+            param (
+                [string[]]$Name
+            )
+            $RegUninstallPath = @(
+                "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
+                "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
+            )
+            $Apps = Get-ItemProperty $RegUninstallPath -ErrorAction SilentlyContinue | Where-Object DisplayName -like "*$($Name)*"
+            if (!$Apps) {
+                Write-Host "$Name is not installed.`nExiting."
+            } # if !$Apps
+            else {
+                Write-Host -ForegroundColor Green "The following product(s) are installed on the machine:"
+                $Apps.DisplayName
+            
+                $Answer = Read-Host "`nUninstall the product(s) listed above? ('Y' to uninstall all / 'C' to choose which to uninstall / 'N' to cancel)"
+                if ($Answer -eq 'Y') {
+                    foreach ($A in $Apps) {
+                        Write-Host -ForegroundColor Green "`nUninstalling $($A.DisplayName)"
+                        # Wrap the exe part of the uninstall string with quotes, if spaces are included in the string
+                        $UninstallString = $UninstallString -replace '^(.*?\.exe)', '"$1"'
+                        # Execute a silent uninstall in the background with no UI.
+                        $UninstallCommand = "$(UninstallString.Replace('/I', '/X')) /qn /noreboot REBOOT=REALLYSUPPRESS"
+                        cmd.exe /c $UninstallCommand
+                    } # foreach 
+                } # if 'Y'
+                elseif ($Answer -eq 'C') {
+                    foreach ($A in $Apps) {
+                        $Answer = Read-Host "`nUninstall $($A.DisplayName)? (Y/N)"
+                        if ($Answer -eq 'Y') {
+                            Write-Host -ForegroundColor Green "`nUninstalling $($A.DisplayName)"
+                            # Wrap the exe part of the uninstall string with quotes, if spaces are included in the string
+                            $UninstallString = $UninstallString -replace '^(.*?\.exe)', '"$1"'
+                            # Execute a silent uninstall in the background with no UI.
+                            $UninstallCommand = "$(UninstallString.Replace('/I', '/X')) /qn /noreboot REBOOT=REALLYSUPPRESS"
+                            cmd.exe /c $UninstallCommand
+                        }
+                        else {
+                            Write-Host "Cancelling uninstall of $($A.DisplayName)."
+                        }   
+                    } # foreach
+                } # elseif 'C' 
+                else {
+                    Write-Host -ForegroundColor Green "Uninstallation cancelled.`nExiting Script."
+                    break
+                } # else 'N'
+            } # else $Apps   
+        } # UninstallApp
+
         switch ($PSCmdlet.ParameterSetName) {
             'Vipre_Action' { 
                 if ($EnableVipre) {
@@ -525,6 +634,7 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
             } # if ParameterSet 'Vipre_Install'
             'Vipre_Uninstall' {
                 if ($UninstallVipre) {
+                    <#
                     $App = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | Where-Object displayname -like *vipre*
                     if (!$App) {
                         Write-Host "Vipre is not installed.`nExiting."
@@ -558,6 +668,8 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                             } # else $Answer -eq 'N'
                         } # foreach $A in $App
                     } # else $App
+                    #>
+                    UninstallApp -Name "Vipre"
                 } # if $UninstallVipre
             } # if ParameterSet 'Vipre_Uninstall'
             'Symantec' {
@@ -594,26 +706,32 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                 }
             } # if ParameterSet 'Symantec'
             'Avast' {
-                $Answer = Read-Host "Would you like to download and run the Avast Removal Tool? (Y/N)"
-                if ($Answer -eq 'Y') {   
-                    Write-Verbose 'Downloading the Avast Removal tool'
-                    # To account for Windows 7 machines, I don't use the Invoke-WebRequest cmdlet below
-                    (New-Object Net.WebClient).DownloadFile("https://files.avast.com/iavs9x/avastclear.exe", "C:\Windows\Temp\avastclear.exe")
-                    Write-Verbose "Download complete"
-                    Start-Process "C:\Windows\Temp\avastclear.exe"
-                } # if 'Y'
-                elseif ($Answer -eq 'N') {
-                    Write-Host "Exiting script."
-                } # if 'N'             
+                # Check if avastclear.exe is already present on the machine
+                if (-not (Test-Path "C:\Windows\Temp\avastclear.exe")) {
+                    $Answer = Read-Host "Would you like to download and run the Avast Clear Tool? (Y/N)"
+                    if ($Answer -eq 'N') {
+                        Write-Host "Exiting script."
+                        return
+                    } # if 'N'     
+                    elseif ($Answer -eq 'Y') {   
+                        Write-Verbose 'Downloading the Avast Removal tool and saving to "C:\Windows\Temp\avastclear.exe".'
+                        # To account for Windows 7 machines, I don't use the Invoke-WebRequest cmdlet below
+                        (New-Object Net.WebClient).DownloadFile("https://files.avast.com/iavs9x/avastclear.exe", "C:\Windows\Temp\avastclear.exe")
+                        Write-Verbose "Download complete. Running avastclear.exe."
+                    } # if 'Y'
+                } # if !Test-Path                   
+                Start-Process "C:\Windows\Temp\avastclear.exe"
+                # If the Avast Clear uninstaller doesn’t work, you can uninstall Avast using the Command Prompt:
+                # https://www.avast.com/en-us/uninstall-utility#pc:~:text=Uninstall%20Avast%20using%20Command%20Prompt            
             } # if ParameterSet 'Avast'
             'Norton' {
                 $Answer = Read-Host "Would you like to download and run the Norton Remove and Reinstall tool? (Y/N)"
                 if ($Answer -eq 'Y') {   
                     if (!(Test-Path "C:\Windows\Temp\NRnR.exe")) {
-                        Write-Verbose 'Downloading the Norton Remove and Reinstall tool'
+                        Write-Verbose 'Downloading the Norton Remove and Reinstall tool and saving to "C:\Windows\Temp\NRnR.exe".'
                         # To account for Windows 7 machines I don't use the Invoke-WebRequest cmdlet below
                         (New-Object Net.WebClient).DownloadFile("https://norton.com/nrnr", "C:\Windows\Temp\NRnR.exe")
-                        Write-Verbose "Download complete"
+                        Write-Verbose "Download complete. Running NRnR.exe."
                         Write-Host -ForegroundColor Green "Download saved to 'C:\Windows\Temp\NRnR.exe'"
                     }
                     else {
@@ -631,6 +749,7 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
             'McAfee_Action' {
                 if ($McAfeeUninstall) {
                     # Uninstall McAfee products using the built-in uninstallers
+                    <#
                     $App = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*", "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | Where-Object displayname -like *mcafee*
                     if (!$App) {
                         Write-Host "McAfee is not installed.`nExiting."
@@ -659,8 +778,10 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                             } # else $Answer -eq 'N'
                         } # foreach $A in $App
                     } # else $App
+                    #>
+                    UninstallApp -Name "McAfee"
                 } # if $McAfeeUnintsall
-                elseif ($McAfeeUninstall1) {
+                elseif ($McAfeeUninstall_MCPR) {
                     # for uninstalling McAfee using MCPR when the built-in McAfee uninstall methods aren't working
                     Write-Host -ForegroundColor Green "Downloading the MCPR (McAfee Consumer Product Removal) Tool"
                     Invoke-WebRequest -Uri 'https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe' -OutFile 'C:\MCPR.exe'
@@ -675,6 +796,31 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                     }
                 }
             } # if ParameterSet 'McAfee_Action'
+            'Sophos_Action' {
+                # uninstall Sophos using the built-in uninstaller (assuming tamper protection is not enabled)
+                #if ($SophosTPEnabled -eq $true) {
+                #    Write-Warning "Sophos Tamper Protection is enabled on this machine. Please disable it before running this script."
+                #    break                    
+                #}
+                #else {
+                if (Test-Path 'C:\Program Files\Sophos\Sophos Endpoint Agent\SophosUninstall.exe') {
+                    Write-Host -ForegroundColor Green "Uninstalling Sophos."
+                    Write-Host "If you're not rebooting now, make sure to un-check the 'Reboot' checkbox before hitting 'Close' at the end, or the machine will reboot."
+                    & 'C:\Program Files\Sophos\Sophos Endpoint Agent\SophosUninstall.exe'
+                    # to run the uninstaller quietly add the --quiet switch to the command above
+                }
+                else {
+                    Write-Host -ForegroundColor Green "Cannot find the Sophos uninstaller.`nExiting script."
+                }   
+                #} # if $SophosTPEnabled -ne $true               
+            } # if parameterSet 'Sophos_Action'
+            'Cisco_Action' {
+                # uninstall Cisco Secure Endpoint using the built-in uninstaller
+                # https://www.cisco.com/c/en/us/support/docs/security/amp-endpoints/215704-installation-and-configuration-of-amp-co.html
+                Write-Host -ForegroundColor Green "Uninstalling Cisco Secure Endpoint"
+                $uninstallPath = Get-ChildItem -Path "C:\Program Files\Cisco\AMP" -Directory | Where-Object { $_.Name -match "^\d+\.\d+\.\d+\.\d+$" } | Select-Object -ExpandProperty FullName | ForEach-Object { Join-Path -Path $_ -ChildPath "uninstall.exe" }
+                Start-Process $uninstallPath -ArgumentList "/R /S /remove 1"
+            } # if parameterSet 'Cisco_Action'            
             'Malwarebytes_Action' {
                 # for uninstalling Malwarebytes using the built-in uninstaller
                 Write-Verbose "Running the Malwarebytes uninstaller"
@@ -697,10 +843,14 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                 }
             } # if ParametreSet 'Kaspersky_Action'
             'ESET_Action' {
+                Write-Verbose "Uninstalling ESET Endpoint Antivirus"
+                <#
                 $APP = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | Where-Object DisplayName -like "*ESET Endpoint Antivirus*"
                 $UninstallString = $App.UninstallString.Replace('/I', '/X')
                 $UninstallCommand = "$uninstallString /qn /noreboot REBOOT=REALLYSUPPRESS"
                 cmd.exe /c $UninstallCommand
+                #>
+                UninstallApp -Name "ESET"
             } # if ParameterSet ESET_Action
             'WSC_Action' {
                 Write-Host -ForegroundColor Green "The folowing AVs are registered with the Windows Security Center:"
@@ -771,11 +921,25 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                 }
             } # if ParameterSet 'Webroot_Action'
             'HP_Wolf_Action' {
+                # Custom sort function to handle wildcards in the sortOrder array
+                # This function returns the index of the matching display name in the sortOrder array
+                # or [int]::MaxValue if no match is found, which will sort it to the end of the list
+                function Get-SortIndex {
+                    param (
+                        [string]$displayName
+                    )
+                    for ($i = 0; $i -lt $sortOrder.Count; $i++) {
+                        if ($sortOrder[$i] -like $displayName) {
+                            return $i
+                        }
+                    }
+                    return [int]::MaxValue
+                }
                 function Uninstall-HPWolf {
                     # Retrieve HP Wolf Security entries from the Registry
-                    $HP_Wolf = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | Where-Object DisplayName -like "*HP*security*"
+                    $HP_Wolf = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*" -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like "*HP*security*" -or $_.DisplayName -like "*HP*Sure*" }
                     if ($HP_Wolf) {
-                        # Re-arrange the order in the array for uninstallation (https://enterprisesecurity.hp.com/s/article/How-to-uninstall-HP-Wolf-Pro-Security)
+                        # Define a custom sort order for uninstallation (see https://enterprisesecurity.hp.com/s/article/How-to-uninstall-HP-Wolf-Pro-Security)
                         $sortOrder = @(
                             "HP Wolf Security"
                             "HP Wolf Security - Console"
@@ -783,37 +947,30 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                             "HP Wolf Security Application Support for Sure Sense"
                             "HP Wolf Security Application Support for Office"
                             "HP Wolf Security Application Support for Chrome*"
+                            "HP Sure*"
                         )
                         # $sorted_HP_Wolf = $HP_Wolf | Sort-Object -Property { $sortOrder.IndexOf($_.DisplayName) }
-                        # Not using this ^ since I need to account for wilcards in the $sortOrder array
-                        # Custom sort function to handle wildcards
-                        function Get-SortIndex {
-                            param (
-                                [string]$displayName
-                            )
-                            for ($i = 0; $i -lt $sortOrder.Count; $i++) {
-                                if ($sortOrder[$i] -like $displayName) {
-                                    return $i
-                                }
-                            }
-                            return [int]::MaxValue
-                        }
+                        # Not using this ^ since I need to account for wilcards in the $sortOrder array                       
                         $sorted_HP_Wolf = $HP_Wolf | Sort-Object -Property { Get-SortIndex $_.DisplayName }
                         Write-Host -ForegroundColor Green "The following HP Wolf Security products are installed on the machine:"
                         $sorted_HP_Wolf.DisplayName
-                        $Answer = Read-Host "`nUninstall the HP products listed above? ('Y' to uninstall all / 'C' to choose which to uninstall / 'N' to cancel)"
-                        if ($Answer -eq 'Y') {
+                        $Answer = Read-Host "`nUninstall the HP products listed above? ('Y' to uninstall silently / 'B' to uninstall with basic UI / 'C' to choose which to uninstall (no UI) / 'N' to cancel)"
+                        if ($Answer -eq 'Y' -or $Answer -eq 'B') {
                             foreach ($App in $sorted_HP_Wolf) {
                                 Write-Host -ForegroundColor Green "`nUninstalling $($App.DisplayName)"
                                 $UninstallString = $App.UninstallString.Replace('/I', '/X')
-                                # Execute a silent uninstall in the background with no UI.
-                                $UninstallCommand = "$uninstallString /qn /noreboot REBOOT=REALLYSUPPRESS"
-                                # Execute a silent uninstall with a basic UI.
-                                # $UninstallCommand = "$uninstallString /qr /noreboot REBOOT=REALLYSUPPRESS"
+                                if ($Answer -eq 'Y') {
+                                    # Execute a silent uninstall in the background with no UI.
+                                    $UninstallCommand = "$uninstallString /qn /noreboot REBOOT=REALLYSUPPRESS"
+                                }
+                                elseif ($Answer -eq 'B') {        
+                                    # Execute a silent uninstall with a basic UI.
+                                    $UninstallCommand = "$uninstallString /qr /noreboot REBOOT=REALLYSUPPRESS"
+                                }
                                 cmd.exe /c $UninstallCommand 
                                 # Start-Process cmd -ArgumentList "/c $($UninstallCommand)" -NoNewWindow
                             } # foreach
-                        } # if 'Y' 
+                        } # if 'Y' or 'B'
                         elseif ($Answer -eq 'C') {
                             foreach ($App in $sorted_HP_Wolf) {
                                 $UninstallString = $App.UninstallString.Replace('/I', '/X')
@@ -833,10 +990,13 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                             } # foreach
                         } # elseif 'C' 
                         else {
-                            Write-Host -ForegroundColor Green "Uninstallation cancelled.`nExiting Script."
+                            Write-Host -ForegroundColor Green "Uninstallation canceled.`nExiting Script."
                             break
                         } # else 'N'  
                     } # if $HP_Wolf
+                    else {
+                        Write-Host "No HP Wolf Security products found."
+                    } # if !$HP_Wolf
                     function Unregister-HPWolf {
                         $AVP = (Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct).DisplayName
                         if ($AVP -match "Wolf") {
@@ -851,7 +1011,7 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                                 $AVP
                             }
                             else {
-                                Write-Host -ForegroundColor Green "Not unregistering HP Wolf from the Windows Security Center."
+                                Write-Host -ForegroundColor Green "NOT unregistering HP Wolf from the Windows Security Center."
                             }   
                         } # if HP Wolf is registered in WSC  
                     } # function Unregister-HPWolf
@@ -879,7 +1039,7 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                 break
             } # if ParameterSet 'RMM'
             'PendingReboot' {
-                # checks if machine is pending a reboot using a PowerShell module from Brian Wilhite
+                # checks if machine is pending a reboot using the below PowerShell module from Brian Wilhite
                 # https://www.powershellgallery.com/packages/PendingReboot/0.9.0.6
                 if (!(Get-Module PendingReboot -ListAvailable)) {
                     if ("NuGet" -notin (Get-PackageProvider).Name) {
@@ -910,7 +1070,7 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
         
                 Write-Verbose -Message "Retrieving AVs registered with the Windows Security Center (by querying WMI)"
                 # The AVs registered with the Windows Security Center are stored in the Registry at 'HKLM:\SOFTWARE\Microsoft\Security Center\Provider\Av\*'.
-                # You can't edit that part of the Registry directly. One way is to interface with that is by using WMI.
+                # You can't edit that part of the Registry directly. One way to interface with that is by using WMI.
                 # For a GUI option use WBEMTEST (https://support.cloudradial.com/hc/en-us/articles/360049084271-Removing-Old-Antivirus-Listings-from-Security-Center)
                 # Or from PowerShell run: Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct | Where-Object displayname -like *<AV_To_Delete>* | ForEach-Object { $_.Delete() }
                 if ( (Get-WmiObject Win32_OperatingSystem).producttype -ne 1 ) {
@@ -1107,7 +1267,7 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                         $TPStatus = (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Defender\Features\' -ErrorAction SilentlyContinue).TamperProtection
                     }
 
-                    Write-Verbose "Checking value of Windows Defender Registry key"
+                    Write-Verbose "Checking value of Windows Defender Registry keys"
                     $RegKey = (Get-ItemProperty 'HKLM:\SOFTWARE\Policies\Microsoft\Windows Defender' -Name 'DisableAntiSpyware' -ErrorAction SilentlyContinue).DisableAntiSpyware,
                     (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Defender' -Name 'DisableAntiSpyware' -ErrorAction SilentlyContinue).DisableAntiVirus,
                     (Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows Defender' -Name 'DisableAntiVirus' -ErrorAction SilentlyContinue).DisableAntiVirus
@@ -1168,7 +1328,6 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                             $Server_Message = "The Windows-Defender feature is not installed on this server. To install, remove any 3rd party AVs then run 'Get-AVInfo -InstallWDFeature'."
                         }
                     }
-
                 } # elseif !$DefaultOverride -or $WindowsDefender
 
                 if (Test-Path 'C:\Program Files\Sophos' -PathType Container) {
@@ -1252,15 +1411,15 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                             Write-Host -ForegroundColor Green "No AV folders to delete.`nExiting."
                             break
                         }
-                        Write-Host -ForegroundColor Green "`nAV folders on the machine (excluding Windows Defender):"
+                        Write-Host -ForegroundColor Green "`nAV folder(s) on the machine (excluding Windows Defender):"
                         $AV_Folders | Sort-Object FolderName, FullPath | Format-Table
-                        $Answer2 = Read-Host "Delete the above folders? (Y/N)"
+                        $Answer2 = Read-Host "Delete the above folder(s)? (Y/N)"
                         if ($Answer2 -eq 'Y') {
-                            Write-Verbose "Deleting the AV folders"
+                            Write-Verbose "Deleting the AV folder(s)"
                             Remove-Item $Folders -Recurse -Force
                             $Folders1 = Get-Item -Path 'C:\Program Files\*', 'C:\Program Files (x86)\*', 'C:\ProgramData\*' -Include $Name -Exclude "*RemoteSetup*" -ErrorAction SilentlyContinue
                             $AV_Folders1 = $Folders1 | Select-Object @{n = 'FolderName'; e = { $_.Name } }, @{n = 'FullPath'; e = { $_.FullName } }, CreationTime
-                            Write-Host -ForegroundColor Green "`nAV folders still on the machine (excluding Windows Defender):"
+                            Write-Host -ForegroundColor Green "`nAV folder(s) still on the machine (excluding Windows Defender):"
                             $AV_Folders1 | Sort-Object FolderName, FullPath | Format-Table
                             break
                         }
@@ -1282,18 +1441,33 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                 }
 
                 if ($IncludeProcesses) {
-                    Write-Host -ForegroundColor Green "`nAntivirus software processes running on the machine:"
+                    Write-Debug "start IncludeProcesses"
+                    Write-Host -ForegroundColor Green "`nAntivirus processes running on the machine (tied to the services listed above):"
                     $WMI_Services = Get-WmiObject Win32_Service | Where-Object { $_.Name -in $Services.Name }
-                    foreach ($S in $Services) {
-                        $ProcessID = ($WMI_Services | Where-Object { $_.Name -eq $S.Name }).ProcessID
-                        if ($ProcessID -ne 0) {
-                            Get-Process @Parameters | Format-Table @{n = "ServiceName"; e = { $S.Name } }, @{n = "ProcessName"; e = { $_.Name } }, Id, StartTime
+                    if ($WMI_Services) {
+                        $Processes = @()
+                        foreach ($S in $Services) {
+                            $ProcessID = ($WMI_Services | Where-Object { $_.Name -eq $S.Name }).ProcessID
+                            if ($ProcessID -ne 0) {
+                                $Proc = Get-Process -Id $ProcessID
+                                $Processes += $Proc
+                            }
                         }
+                        Write-Output $Processes | Format-Table `
+                        @{n = "ServiceName"; e = { ($WMI_Services | Where-Object ProcessID -eq ($_.Id)).Name } },
+                        @{n = "ProcessName"; e = { $_.Name } }, 
+                        @{n = "ProcessID"; e = { $_.Id } }, 
+                        StartTime, Company -AutoSize    
                     }
-                }
-
+                    if (!$WMI_Services -or !$Processes) {
+                        # if $WMI_Services is empty or if no processes with id not equal to 0 were found
+                        Write-Host "No processes (with the process ID not equal to 0) found for the services listed above.`n"
+                    }
+                    Write-Debug "end IncludeProcesses"
+                } # if $IncludeProcesses
+                
                 Write-Host -ForegroundColor Green "Antivirus software registered with the Windows Security Center (queried from the SecurityCenter2 namespace using WMI):"
-                # "if ($AV.Count -eq 0)"" as opposed to "if (!$AV)" is to account for $AV existing but as an ampty array
+                # using "if ($AV.Count -eq 0)" as opposed to "if (!$AV)" to account for $AV existing but as an empty array
                 if ( ($AV | Measure-Object).Count -eq 0 ) {
                     Write-Warning "Failed to retrieve the Antivirus software from the SecurityCenter2 namespace."
                     Write-Host "`n"
@@ -1304,7 +1478,32 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
                         # $AV | Format-List AMRunningMode, *enabled*
                     }
                     else {
-                        # The [0] after $AV is for the 'Sort-Object DisplayName' to work
+                        <#
+                        # Based on https://www.cyberdrain.com/monitoring-with-powershell-chapter-2-anti-virus-installation-status/
+                        $uniqueProductStates = $AV[0] | Sort-Object DisplayName | Select-Object -Unique productState
+                        foreach ($state in $uniqueProductStates) {
+                            switch ($state.productState) {
+                                "262144" { $UpdateStatus = "Up to date" ; $RealTimeProtectionStatus = "Disabled" }
+                                "262160" { $UpdateStatus = "Out of date" ; $RealTimeProtectionStatus = "Disabled" }
+                                "266240" { $UpdateStatus = "Up to date" ; $RealTimeProtectionStatus = "Enabled" }
+                                "266256" { $UpdateStatus = "Out of date" ; $RealTimeProtectionStatus = "Enabled" }
+                                "393216" { $UpdateStatus = "Up to date" ; $RealTimeProtectionStatus = "Disabled" }
+                                "393232" { $UpdateStatus = "Out of date" ; $RealTimeProtectionStatus = "Disabled" }
+                                "393488" { $UpdateStatus = "Out of date" ; $RealTimeProtectionStatus = "Disabled" }
+                                "397312" { $UpdateStatus = "Up to date" ; $RealTimeProtectionStatus = "Enabled" }
+                                "397328" { $UpdateStatus = "Out of date" ; $RealTimeProtectionStatus = "Enabled" }
+                                "397584" { $UpdateStatus = "Out of date" ; $RealTimeProtectionStatus = "Enabled" }
+                                "397568" { $UpdateStatus = "Up to date"; $RealTimeProtectionStatus = "Enabled" }
+                                "393472" { $UpdateStatus = "Up to date" ; $RealTimeProtectionStatus = "Disabled" }
+                                default { $UpdateStatus = "Unknown" ; $RealTimeProtectionStatus = "Unknown" }
+                            }
+                            $productStateDescriptions += "ProductState: $($state.productState) - UpdateStatus: $UpdateStatus, RealTimeProtectionStatus: $RealTimeProtectionStatus"
+                            Write-Host -ForegroundColor Cyan ($productStateDescriptions -join " / ")
+                            Write-Debug "ProductState Switch"
+                        } # foreach $state
+                        #>
+
+                        # The [0] after $AV is needed for exposing the $AV properties to Sort-Object
                         Write-Output $AV[0] | Sort-Object DisplayName | Format-Table DisplayName, ProductState, TimeStamp, InstanceGUID -AutoSize -Wrap
                     } # if -not $Server
                 } # else $AV
@@ -1436,4 +1635,4 @@ On Windows 7 machines, the CleanWipe utility cannot be run from where ScreenConn
         Write-Verbose "[END  ] Ending: $($MyInvocation.MyCommand)"
     }
     
-} #function
+} # function Get-AVInfo
