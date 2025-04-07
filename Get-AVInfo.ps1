@@ -5,7 +5,7 @@ function Get-AVInfo {
     .DESCRIPTION
     This script first queries the machine for a bunch of different AVs, from a predefined list, by searching installed services. It then uses CIM (or WMI) to retrieve any AVs registered with Windows. The script then retrieves more detailed information about the specific AV you specify (Vipre, Bitdefender, or Windows Defender); if nothing is specified, the default is Vipre, unless the 'DefaultOverride' parameter is used. Finally, the script retrieves basic information about the hardware and operating system, often helpful when troubleshooting things like out-of-date definitions.
     The script can do other things as well, like update definitions for the different antiviruses, as well as other useful checks and actions. For more information about what the script can do, read the README.md file in GitHub (link below), and check out the PowerShell help on the parameters, provided with this script. There are also tests and checks that happen in the background that are not listed here or in the parameter help (but are in the GitHub README.md file), and that only show up in the script results if found to be true. For more on that, you'll have to read through the actual script :)
-    GitHub link: https://github.com/stangh/Get-AVInfo
+    GitHub link: https://github.com/IntelliScripts/Get-AVInfo
     .PARAMETER Bitdefender
     Returns detailed information about Bitdefender installed on the system. Cannot be used with Vipre and Windows Defender parameters.
     .PARAMETER UpdateBDDefs
@@ -104,11 +104,12 @@ function Get-AVInfo {
     Various. The script outputs information about the AVs installed on the system, as well as other relevant information.
     .NOTES
     This script can be run on a machine in Automate, backstage. Simply paste the contents of this function into the shell and press enter, to load the script into memory. Then, just run 'Get-AVInfo', along with whatever parameters, if any, you want to add.
-    You can also run "wget -uri 'https://raw.githubusercontent.com/stangh/Get-AVInfo/master/Get-AVInfo.ps1' -UseBasicParsing | iex" to download and load the script into memory.
+    You can also run the code below to download and load the script into memory:
+    "wget -uri 'https://raw.githubusercontent.com/IntelliScripts/Get-AVInfo/master/Get-AVInfo.ps1' -UseBasicParsing | iex"
     .LINK
-    https://github.com/stangh/Get-AVInfo
+    https://github.com/IntelliScripts/Get-AVInfo
     =================================
-    Author: Eliyohu Stengel
+    Author: THH
     Email: estengel@intellicomp.net
     Comments and suggestions welcome!
     =================================
@@ -384,7 +385,7 @@ function Get-AVInfo {
                     break
                 } # else 'N'
             } # else $Apps   
-        } # UninstallApp
+        } # function UninstallApp
 
         switch ($PSCmdlet.ParameterSetName) {
             'Vipre_Action' { 
@@ -591,6 +592,11 @@ function Get-AVInfo {
                     if (!(Get-Process Huntress*, *RIO*)) {
                         Write-Host "No Huntress processes running.`n"
                     }
+                    # Check Huntress Tamper Protection Mode
+                    # https://support.huntress.io/hc/en-us/articles/34614410683795-Huntress-Agent-Tamper-Protection
+                    if ((Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\Huntress\' -Name 'UninstallMode' -ErrorAction SilentlyContinue).UninstallMode -eq 1) {
+                        Write-Host -ForegroundColor Cyan "Huntress Protection mode is enabled.`n"
+                    }
                 }
             } # if ParameterSet 'WindowsDefender_Action'
             'Bitdefender_Action' {
@@ -784,7 +790,11 @@ function Get-AVInfo {
                 elseif ($McAfeeUninstall_MCPR) {
                     # for uninstalling McAfee using MCPR when the built-in McAfee uninstall methods aren't working
                     Write-Host -ForegroundColor Green "Downloading the MCPR (McAfee Consumer Product Removal) Tool"
+                    # Retrieve the current value for $ProgressPreference, set it to 'SilentlyContinue' to suppress the progress bar for a much quicker download, then reset it to its original value
+                    $originalProgressPreference = $ProgressPreference
+                    $ProgressPreference = 'SilentlyContinue'
                     Invoke-WebRequest -Uri 'https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe' -OutFile 'C:\MCPR.exe'
+                    $ProgressPreference = $originalProgressPreference
                     Write-Host -ForegroundColor Green "Download saved to 'C:\MCPR.exe'"
                     $Answer3 = Read-Host "Run the tool? (Y/N)"
                     if ($Answer3 -eq 'Y') {
@@ -1356,6 +1366,27 @@ function Get-AVInfo {
                 if ( (Get-ItemProperty hklm:\SOFTWARE\LabTech\Service).clientID -eq 113 ) {
                     $BT = "This machine is at BT. BT uses Sophos."
                 }
+
+
+                # If SentinelOne is present, check for SentinelOne tamper protection
+                if (Test-Path 'C:\Program Files\SentinelOne' -PathType Container) {
+                    Write-Verbose "Checking SentinelOne tamper protection status"
+                    
+                    $TamperProtection = & 'C:\Program Files\SentinelOne\Sentinel Agent*\sentinelctl.exe' configure | Select-String -Pattern "agent.antiTampering", "agent.safeBootProtection"
+                    
+                    $TamperProtection = & 'C:\Program Files\SentinelOne\Sentinel Agent*\sentinelctl.exe' configure | 
+                    Select-String -Pattern "agent.antiTampering", "agent.safeBootProtection" | 
+                    ForEach-Object {
+                        # Split the line into key and value, then trim and format
+                        $Parts = $_.Line -split '\s{2,}' # Split on two or more spaces
+                        "{0,-30} {1}" -f $Parts[0].Trim(), $Parts[1].Trim()
+                    }
+                    
+                    if ($TamperProtection) {
+                        $SentinelOneTamperProtection = $true
+                    }    
+                } # if SentinelOne present
+                
             
                 Write-Verbose "Testing for the presence of the Techloq content filter"
                 if (Get-Process WindowsFilterAgentWPFClient -ErrorAction SilentlyContinue | Where-Object { $_.Company -eq 'Techloq' }) {
@@ -1574,6 +1605,10 @@ function Get-AVInfo {
                     }
                     if ($TPStatus -eq $true -or $TPStatus -eq 1) {
                         Write-Host -ForegroundColor Cyan "Windows Defender Tamper Protection is enabled (configurable from the Windows Security app only)"
+                    }
+                    if ($SentinelOneTamperProtection) {
+                        Write-Host -ForegroundColor Red "`nSentinelOne Tamper Protection and Safe Boot Status:"
+                        $TamperProtection
                     }
                     if ($Server_Message) {
                         Write-Host -ForegroundColor Cyan "$Server_Message"
