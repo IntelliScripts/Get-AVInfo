@@ -10,6 +10,8 @@ function Get-AVInfo {
     Returns detailed information about Bitdefender installed on the system. Cannot be used with Vipre and Windows Defender parameters.
     .PARAMETER UpdateBDDefs
     Updates Bitdefender definitions. Cannot be used with any other parameter.
+    .PARAMETER UninstallBitdefender
+    Uninstalls password-protected Bitdefender. Must know the password to uninstall. The script will prompt for the password.
     .PARAMETER WindowsDefender
     Returns detailed information about Windows Defender installed on the system. Cannot be used with Vipre and Bitdefender parameters.
     When specifying this parameter, the script will also look for the registry key that disables Windows Defender and prevents it from starting.
@@ -54,7 +56,7 @@ function Get-AVInfo {
     .PARAMETER ESETUninstall
     Uninstalls ESET Endpoint Antivirus.
     .PARAMETER UnregisterAV
-    Unregisters AVs from the Windows Security Center.
+    Unregisters AVs from the Windows Security Center using WMI.
     .PARAMETER UnregisterWebroot
     Unregisters Webroot from the Windows Security Center.
     .PARAMETER UninstallWebroot
@@ -106,6 +108,10 @@ function Get-AVInfo {
     This script can be run on a machine in Automate, backstage. Simply paste the contents of this function into the shell and press enter, to load the script into memory. Then, just run 'Get-AVInfo', along with whatever parameters, if any, you want to add.
     You can also run the code below to download and load the script into memory:
     "wget -uri 'https://raw.githubusercontent.com/IntelliScripts/Get-AVInfo/master/Get-AVInfo.ps1' -UseBasicParsing | iex"
+    # For machines that do not support wget (e.g., older PowerShell versions), use:
+    "(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/IntelliScripts/Get-AVInfo/master/Get-AVInfo.ps1') | iex"
+    If you get an error "The request was aborted: Could not create SSL/TLS secure channel.", run this command first: 
+    "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12"
     .LINK
     https://github.com/IntelliScripts/Get-AVInfo
     =================================
@@ -228,6 +234,10 @@ function Get-AVInfo {
             Mandatory = $false)]
         [Switch]$UpdateBDDefs,
 
+        [Parameter(parametersetname = 'Bitdefender_Action',
+            Mandatory = $false)]
+        [Switch]$UninstallBitdefender,
+
         [Parameter(parametersetname = 'Vipre')]
         [Parameter(parametersetname = 'Bitdefender')]
         [Parameter(parametersetname = 'WindowsDefender')]
@@ -334,7 +344,7 @@ function Get-AVInfo {
         Write-Verbose "[BEGIN  ] Starting: $($MyInvocation.MyCommand)"
     }
     PROCESS {
-        Write-Debug "Started PROCESS block"
+        # Write-Debug "Started PROCESS block"
         function UninstallApp {
             [CmdletBinding()]
             param (
@@ -358,9 +368,11 @@ function Get-AVInfo {
                     foreach ($A in $Apps) {
                         Write-Host -ForegroundColor Green "`nUninstalling $($A.DisplayName)"
                         # Wrap the exe part of the uninstall string with quotes, if spaces are included in the string
-                        $UninstallString = $UninstallString -replace '^(.*?\.exe)', '"$1"'
+                        # $UninstallString = $A.UninstallString -replace '^(.*?\.exe)', '"$1"'
+                        $UninstallString = $A.UninstallString -replace '^(.*?\.exe)(.*)', '"`"$1`""$2"'
                         # Execute a silent uninstall in the background with no UI.
-                        $UninstallCommand = "$(UninstallString.Replace('/I', '/X')) /qn /noreboot REBOOT=REALLYSUPPRESS"
+                        $UninstallCommand = "$($UninstallString.Replace('/I', '/X')) /qn /noreboot REBOOT=REALLYSUPPRESS"
+                        Write-Debug "UninstallString: $UninstallString`nUninstall command: $UninstallCommand"
                         cmd.exe /c $UninstallCommand
                     } # foreach 
                 } # if 'Y'
@@ -370,9 +382,9 @@ function Get-AVInfo {
                         if ($Answer -eq 'Y') {
                             Write-Host -ForegroundColor Green "`nUninstalling $($A.DisplayName)"
                             # Wrap the exe part of the uninstall string with quotes, if spaces are included in the string
-                            $UninstallString = $UninstallString -replace '^(.*?\.exe)', '"$1"'
+                            $UninstallString = $A.UninstallString -replace '^(.*?\.exe)', '"$1"'
                             # Execute a silent uninstall in the background with no UI.
-                            $UninstallCommand = "$(UninstallString.Replace('/I', '/X')) /qn /noreboot REBOOT=REALLYSUPPRESS"
+                            $UninstallCommand = "$($UninstallString.Replace('/I', '/X')) /qn /noreboot REBOOT=REALLYSUPPRESS"
                             cmd.exe /c $UninstallCommand
                         }
                         else {
@@ -381,7 +393,7 @@ function Get-AVInfo {
                     } # foreach
                 } # elseif 'C' 
                 else {
-                    Write-Host -ForegroundColor Green "Uninstallation cancelled.`nExiting Script."
+                    Write-Host -ForegroundColor Green "Uninstallation canceled.`nExiting Script."
                     break
                 } # else 'N'
             } # else $Apps   
@@ -555,11 +567,18 @@ function Get-AVInfo {
                 if ($UpdateNISDefs) {
                     # for when NISEnabled is $True but NISSignatureLastUpdated is empty, and manually updating defs the usual way doesn't help 
                     if ((Get-MpComputerStatus).AMProductVersion -gt '4.1.522.0') {
-                        # Download page: https://www.microsoft.com/en-us/wdsi/defenderupdates
-                        Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?LinkID=187316&arch=x64&nri=true" -OutFile 'C:\Windows\Temp\NISDefs.exe' | Out-Null
-                        & 'C:\Windows\Temp\NISDefs.exe'
-                        Write-Host -ForegroundColor Green "NIS defs last updated:"
-                        (Get-MpComputerStatus).NISSignatureLastUpdated
+                        try {
+                            # Download page: https://www.microsoft.com/en-us/wdsi/defenderupdates
+                            Invoke-WebRequest -Uri "https://go.microsoft.com/fwlink/?LinkID=187316&arch=x64&nri=true" -OutFile 'C:\Windows\Temp\NISDefs.exe' -ErrorAction Stop | Out-Null
+                            & 'C:\Windows\Temp\NISDefs.exe'
+                            Write-Host -ForegroundColor Green "NIS definitions update complete."
+                            Write-Host -ForegroundColor Green "NIS defs last updated: $((Get-MpComputerStatus).NISSignatureLastUpdated)"
+                            Remove-Item 'C:\Windows\Temp\NISDefs.exe' -Force -ErrorAction SilentlyContinue
+                        }
+                        catch {
+                            Write-Warning "Failed to download the NIS definitions update. Error: $($_.Exception.Message)"
+                            break
+                        }
                     }
                     else {
                         Write-Warning "The Antimalware Client version on the machine is older than version 4.1.522.0. Please manually download a compatible version NIS updates."
@@ -600,8 +619,34 @@ function Get-AVInfo {
                 }
             } # if ParameterSet 'WindowsDefender_Action'
             'Bitdefender_Action' {
-                Write-Verbose "Updating Bitdefender definitions"
-                & "C:\Program Files\Bitdefender\Endpoint Security\product.console.exe" /c StartUpdate
+                if ($UpdateBDDefs) {
+                    Write-Verbose "Updating Bitdefender definitions"
+                    & "C:\Program Files\Bitdefender\Endpoint Security\product.console.exe" /c StartUpdate
+                }
+                if ($UninstallBitdefender) {
+                    # https://www.bitdefender.com/business/support/en/77209-80124-using-the-uninstall-tool-to-remove-bitdefender-endpoint-security-tools.html
+                    $Password = Read-Host -Prompt "Enter the password for the Bitdefender uninstall tool" -AsSecureString
+                    $PlainTextPassword = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($Password))
+                    $ToolPath = "C:\Windows\Temp\BEST_uninstallTool.exe"
+
+                    Write-Host "Downloading the Bitdefender uninstall tool"
+                    $originalProgressPreference = $ProgressPreference
+                    $ProgressPreference = 'SilentlyContinue'
+                    Invoke-WebRequest -Uri "https://download.bitdefender.com/SMB/Hydra/release/bst_win/uninstallTool/BEST_uninstallTool.exe?_gl=1*1oh7zs8*_ga*ODQ1ODU2MjY1LjE3NDYwNDExMzg.*_ga_6M0GWNLLWF*MTc0NjA0MTEzNy4xLjEuMTc0NjA0MTE0MC41Ny4wLjU5MzUwOTE4NA.." -OutFile $ToolPath
+                    $ProgressPreference = $originalProgressPreference
+
+                    Write-Debug "Bitdefender download complete. Path: $ToolPath. UNinstall password: $PlainTextPassword"
+                    if (Test-Path $ToolPath) {
+                        Write-Host "Running the Bitdefender uninstall tool"
+                        Start-Process -FilePath $ToolPath -ArgumentList "/bdparams /password=`"$PlainTextPassword`"" -Wait
+                        Write-Host -ForegroundColor Green "Bitdefender uninstall tool has completed."
+                        Remove-Item $ToolPath -Force
+                        Write-Host "The uninstall tool has been removed from the machine."
+                    }
+                    else {
+                        Write-Warning "Failed to download the Bitdefender uninstall tool. Please try again."
+                    }
+                }
             } # if ParameterSet 'Bitdefender_Action'
             'Vipre_Install' {
                 $Answer = Read-Host "Would you like to download the Vipre installer to the machine? (Y/N)"
@@ -789,12 +834,47 @@ function Get-AVInfo {
                 } # if $McAfeeUnintsall
                 elseif ($McAfeeUninstall_MCPR) {
                     # for uninstalling McAfee using MCPR when the built-in McAfee uninstall methods aren't working
+
+                    Write-Warning "The tool may reboot the machine after running, without prompting for confirmation.`nPlease confirm the machine can be rebooted before proceeding."
+                    $Answer6 = Read-Host "Proceed? (Y/N)"
+                    if ($Answer6 -eq 'N') {
+                        Write-Host "Exiting script."
+                        break
+                    } # if 'N'
+
+                    # Check if the MCPR tool is already present on the machine and matches the expected hash value
+                    if ( (Test-Path 'C:\MCPR.exe') -and (((Get-FileHash -Path 'C:\MCPR.exe' -Algorithm SHA256).Hash -eq 'D4D2266A19876BECCC95A97E1E5821EF42D98D503818C1E3F19BE75E9358B100')) ) {
+                        Write-Host -ForegroundColor Green "The MCPR tool is already present on the machine, at 'C:\MCPR.exe'"
+                        $Answer5 = Read-Host "Run the tool? (Y/N)"
+                        if ($Answer5 -eq 'Y') {
+                            Write-Verbose "Running the tool"
+                            & "C:\MCPR.exe"
+                            break
+                        }
+                        elseif ($Answer5 -eq 'N') {
+                            Write-Host -ForegroundColor Green "NOT running the tool.`nExiting script."
+                        }
+                    } # if Test-Path
+                    else {
+                        Write-Host "The MCPR tool is not present on the machine, or it is present but does not match the expected file hash."
+                    }
+
                     Write-Host -ForegroundColor Green "Downloading the MCPR (McAfee Consumer Product Removal) Tool"
                     # Retrieve the current value for $ProgressPreference, set it to 'SilentlyContinue' to suppress the progress bar for a much quicker download, then reset it to its original value
                     $originalProgressPreference = $ProgressPreference
                     $ProgressPreference = 'SilentlyContinue'
                     Invoke-WebRequest -Uri 'https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe' -OutFile 'C:\MCPR.exe'
                     $ProgressPreference = $originalProgressPreference
+                    
+                    # Check that the file downloaded successfully using the expected hash value
+                    $expectedHash = 'D4D2266A19876BECCC95A97E1E5821EF42D98D503818C1E3F19BE75E9358B100'
+                    $actualHash = (Get-FileHash -Path 'C:\MCPR.exe' -Algorithm SHA256).Hash
+                    if ($actualHash -ne $expectedHash) {
+                        Write-Warning "The downloaded file's hash does not match the expected hash. 
+                        Please download the file manually from 'https://download.mcafee.com/molbin/iss-loc/SupportTools/MCPR/MCPR.exe', save it to 'C:\MCPR.exe', then run this script again."
+                        break
+                    }
+
                     Write-Host -ForegroundColor Green "Download saved to 'C:\MCPR.exe'"
                     $Answer3 = Read-Host "Run the tool? (Y/N)"
                     if ($Answer3 -eq 'Y') {
@@ -807,12 +887,6 @@ function Get-AVInfo {
                 }
             } # if ParameterSet 'McAfee_Action'
             'Sophos_Action' {
-                # uninstall Sophos using the built-in uninstaller (assuming tamper protection is not enabled)
-                #if ($SophosTPEnabled -eq $true) {
-                #    Write-Warning "Sophos Tamper Protection is enabled on this machine. Please disable it before running this script."
-                #    break                    
-                #}
-                #else {
                 if (Test-Path 'C:\Program Files\Sophos\Sophos Endpoint Agent\SophosUninstall.exe') {
                     Write-Host -ForegroundColor Green "Uninstalling Sophos."
                     Write-Host "If you're not rebooting now, make sure to un-check the 'Reboot' checkbox before hitting 'Close' at the end, or the machine will reboot."
@@ -822,7 +896,6 @@ function Get-AVInfo {
                 else {
                     Write-Host -ForegroundColor Green "Cannot find the Sophos uninstaller.`nExiting script."
                 }   
-                #} # if $SophosTPEnabled -ne $true               
             } # if parameterSet 'Sophos_Action'
             'Cisco_Action' {
                 # uninstall Cisco Secure Endpoint using the built-in uninstaller
@@ -1207,7 +1280,7 @@ function Get-AVInfo {
 
                     Write-Verbose "Testing for Vipre version 12.0 "
                     if ( ( (Get-Process SBAM* | Select-Object -First 1).FileVersion -like "12.0*" ) -and 
-                    ( (& 'C:\Program Files*\VIPRE Business Agent\SBAMCommandLineScanner.exe' /apstate) -eq "Disabled" ) ) {
+                        ( (& 'C:\Program Files*\VIPRE Business Agent\SBAMCommandLineScanner.exe' /apstate) -eq "Disabled" ) ) {
                         $Buggy_Version = "Vipre 12.0.x is installed. There is a bug in version 12.0 that prevents Vipre Active Protection from turning on. If you can't enable Active Protection, install Vipre version 12.3 or higher and try again."
                     } # if Get-Process
                 } # if $Vipre
@@ -1363,7 +1436,8 @@ function Get-AVInfo {
                     }
                 }
 
-                if ( (Get-ItemProperty hklm:\SOFTWARE\LabTech\Service).clientID -eq 113 ) {
+                # if ( (Get-ItemProperty hklm:\SOFTWARE\LabTech\Service -ErrorAction SilentlyContinue).clientID -eq 113 ) {
+                if ( $env:NINJA_ORGANIZATION_NAME -eq 'Beth Tfiloh' ) {
                     $BT = "This machine is at BT. BT uses Sophos."
                 }
 
@@ -1434,7 +1508,7 @@ function Get-AVInfo {
                     Write-Verbose "Looking for AV folders"
                     $Name = "*vipre*", "*trend*", "*sophos*", "*symantec*", "*eset*", "*webroot*", "*cylance*", "*mcafee*", "*avg*", "*santivirus*", "*segurazo*", "*avira*", "*norton*", `
                         "*malware*", "*kaspersky*", "*sentinel*", "*avast*", "*spyware*", "*spybot*", "*WRCore*", "*WRData*", "*Trusteer*", "*SuperAntiSpyware*", "*CrowdStrike*", `
-                        "*Managed Antivirus*", "*ReasonLabs*", "Bitdefender", "bdkitinstaller", "bdlogging", "*Cisco*"  #,"*N-able*"
+                        "*Managed Antivirus*", "*ReasonLabs*", "Bitdefender", "bdkitinstaller", "bdlogging", "*Cisco*", "*Cybereason*". "*ITbrain*" #,"*N-able*"
                     $Folders = Get-Item -Path 'C:\Program Files\*', 'C:\Program Files (x86)\*', 'C:\ProgramData\*' -Include $Name -Exclude "*RemoteSetup*", "*SafeNet*" -ErrorAction SilentlyContinue
                     $AV_Folders = $Folders | Select-Object @{n = 'FolderName'; e = { $_.Name } }, @{n = 'FullPath'; e = { $_.FullName } }, CreationTime
                     if ($DeleteAVFolders) {
@@ -1534,8 +1608,8 @@ function Get-AVInfo {
                         } # foreach $state
                         #>
 
-                        # The [0] after $AV is needed for exposing the $AV properties to Sort-Object
-                        Write-Output $AV[0] | Sort-Object DisplayName | Format-Table DisplayName, ProductState, TimeStamp, InstanceGUID -AutoSize -Wrap
+                        # Combine the two arrays in $AV and flatten them (to expose the properties from both CIM queries/arrays to Sort-Object) and remove null values
+                        Write-Output $AV | ForEach-Object { $_ } | Where-Object { $_ } | Sort-Object DisplayName | Format-Table DisplayName, ProductState, TimeStamp, InstanceGUID -AutoSize -Wrap
                     } # if -not $Server
                 } # else $AV
 
