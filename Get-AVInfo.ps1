@@ -305,6 +305,10 @@ function Get-AVInfo {
             Mandatory = $false)]
         [Switch]$ESETUninstall,
 
+        [Parameter(parametersetname = 'DattoEDR_Action',
+            Mandatory = $false)]
+        [Switch]$DattoEDRUninstall,
+
         [Parameter(parametersetname = 'WSC_Action',
             Mandatory = $false)]
         [Switch]$UnregisterAV,
@@ -635,7 +639,7 @@ function Get-AVInfo {
                     Invoke-WebRequest -Uri "https://download.bitdefender.com/SMB/Hydra/release/bst_win/uninstallTool/BEST_uninstallTool.exe?_gl=1*1oh7zs8*_ga*ODQ1ODU2MjY1LjE3NDYwNDExMzg.*_ga_6M0GWNLLWF*MTc0NjA0MTEzNy4xLjEuMTc0NjA0MTE0MC41Ny4wLjU5MzUwOTE4NA.." -OutFile $ToolPath
                     $ProgressPreference = $originalProgressPreference
 
-                    Write-Debug "Bitdefender download complete. Path: $ToolPath. UNinstall password: $PlainTextPassword"
+                    Write-Debug "Bitdefender download complete. Path: $ToolPath. Uninstall password: $PlainTextPassword"
                     if (Test-Path $ToolPath) {
                         Write-Host "Running the Bitdefender uninstall tool"
                         Start-Process -FilePath $ToolPath -ArgumentList "/bdparams /password=`"$PlainTextPassword`"" -Wait
@@ -742,6 +746,7 @@ function Get-AVInfo {
                         # remove the old version if present, otherwise expand-archive will not overwite existing file
                         if ( Test-Path 'C:\Windows\Temp\CleanWipe*' ) { Get-ChildItem 'C:\Windows\Temp\CleanWipe*' | Remove-Item -Recurse -Force -Confirm:$false }
                         Write-Verbose 'Downloading the CleanWipe utility version 14.3.9205.6000'
+                        # https://knowledge.broadcom.com/external/article/178870/download-the-cleanwipe-removal-tool-to-u.html
                         # To account for Windows 7 machines, I don't use the typical Invoke-WebRequest cmdlet below
                         (New-Object Net.WebClient).DownloadFile("https://labtech.intellicomp.net/labtech/transfer/Tools/1667853049028__CleanWipe_14.3.9205.6000.zip", "C:\Windows\Temp\CleanWipe.zip")
                         Write-Verbose "Download complete"
@@ -887,15 +892,24 @@ function Get-AVInfo {
                 }
             } # if ParameterSet 'McAfee_Action'
             'Sophos_Action' {
-                if (Test-Path 'C:\Program Files\Sophos\Sophos Endpoint Agent\SophosUninstall.exe') {
-                    Write-Host -ForegroundColor Green "Uninstalling Sophos."
-                    Write-Host "If you're not rebooting now, make sure to un-check the 'Reboot' checkbox before hitting 'Close' at the end, or the machine will reboot."
-                    & 'C:\Program Files\Sophos\Sophos Endpoint Agent\SophosUninstall.exe'
-                    # to run the uninstaller quietly add the --quiet switch to the command above
+                # For Windows 10 (x64) and Windows Server 2016 and later running a supported Core Agent
+                $sophosUninstallPath = 'C:\Program Files\Sophos\Sophos Endpoint Agent\SophosUninstall.exe'
+                # For legacy platforms
+                $uninstallCliPath = 'C:\Program Files\Sophos\Sophos Endpoint Agent\uninstallcli.exe'
+                # $uninstallGUIPath = 'C:\Program Files\Sophos\Sophos Endpoint Agent\uninstallgui.exe'
+
+                if (Test-Path $sophosUninstallPath) {
+                    Write-Host -ForegroundColor Green "Running Sophos uninstaller at: $sophosUninstallPath"
+                    Start-Process -FilePath $sophosUninstallPath -ArgumentList '--quiet' -Wait
+                }
+                elseif (Test-Path $uninstallCliPath) {
+                    Write-Host -ForegroundColor Green "Running Sophos uninstallcli at: $uninstallCliPath"
+                    & $uninstallCliPath
                 }
                 else {
                     Write-Host -ForegroundColor Green "Cannot find the Sophos uninstaller.`nExiting script."
-                }   
+                    break
+                }
             } # if parameterSet 'Sophos_Action'
             'Cisco_Action' {
                 # uninstall Cisco Secure Endpoint using the built-in uninstaller
@@ -935,6 +949,19 @@ function Get-AVInfo {
                 #>
                 UninstallApp -Name "ESET"
             } # if ParameterSet ESET_Action
+            'DattoEDR_Action' {
+                Write-Verbose "Uninstalling Datto EDR"
+                # https://edr.datto.com/help/Content/1-start/uninstalling-agent.htm#:~:text=Uninstalling%20from%20Windows
+                if (Test-Path "C:\Program Files\Infocyte\Agent\agent.exe") {
+                    & "C:\Program Files\Infocyte\Agent\agent.exe" --uninstall
+                }
+                elseif (Test-Path "C:\ProgramData\CentraStage\AEMAgent\RMM.AdvancedThreatDetection\agent.exe") {
+                    & "C:\ProgramData\CentraStage\AEMAgent\RMM.AdvancedThreatDetection\agent.exe" --uninstall
+                }
+                else {
+                    Write-Host "Infocyte/Datto EDR agent not found in expected locations."
+                }
+            } # if ParameterSet DattoEDR_Action
             'WSC_Action' {
                 Write-Host -ForegroundColor Green "The folowing AVs are registered with the Windows Security Center:"
                 $AVP = (Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct).DisplayName
@@ -1145,7 +1172,7 @@ function Get-AVInfo {
             } # if ParameterSet 'PendingReboot'       
             Default {
                 Write-Verbose -Message "Retrieving AVs by querying services"
-                $Services = Get-Service -DisplayName *vipre*, *SBAMSvc*, *defend*, *trend*, *sophos*, *eset*, *symantec*, *webroot*, *cylance*, *mcafee*, *avg*, `
+                $Services = Get-Service -DisplayName *vipre*, *SBAMSvc*, *defend*, *trend*, *sophos*, *eset*, *symantec*, *webroot*, *cylance*, *mcafee*, *avg*, *datto*, `
                     *santivirus*, *segurazo*, *avira*, *norton*, *malware*, *kaspersky*, *sentinel*, *avast*, *spyware*, *spybot*, *WRCoreService*, *WRSkyClient*, *WRSVC*, `
                     *WRSMSVC*, *CrowdStrike*, *Rapport*, *Reason*, '*Cisco Secur*', '*HP Sure*', 'HP Security Update Service', '*SAS Core*', "360 Total Security" `
                     -Exclude *firewall*, '*AMD Crash*', '*LDK License Manager', '*Sophos Connect*', '*Avast SecureLine VPN*', '*browser*', '*%1!s! Update Service*' -ErrorAction SilentlyContinue
@@ -1484,7 +1511,8 @@ function Get-AVInfo {
                         $M = $Manufacturer
                     }
                     $FastBoot = (Get-ItemProperty 'HKLM:SYSTEM\CurrentControlSet\Control\Session Manager\Power\').HiberBootEnabled
-                  
+                    # powercfg /a
+
                     $Props = [Ordered]@{
                         'SerialNumber'                         = $BIOS.SerialNumber
                         'WindowsVersion'                       = $OS.Caption
@@ -1508,8 +1536,8 @@ function Get-AVInfo {
                     Write-Verbose "Looking for AV folders"
                     $Name = "*vipre*", "*trend*", "*sophos*", "*symantec*", "*eset*", "*webroot*", "*cylance*", "*mcafee*", "*avg*", "*santivirus*", "*segurazo*", "*avira*", "*norton*", `
                         "*malware*", "*kaspersky*", "*sentinel*", "*avast*", "*spyware*", "*spybot*", "*WRCore*", "*WRData*", "*Trusteer*", "*SuperAntiSpyware*", "*CrowdStrike*", `
-                        "*Managed Antivirus*", "*ReasonLabs*", "Bitdefender", "bdkitinstaller", "bdlogging", "*Cisco*", "*Cybereason*". "*ITbrain*" #,"*N-able*"
-                    $Folders = Get-Item -Path 'C:\Program Files\*', 'C:\Program Files (x86)\*', 'C:\ProgramData\*' -Include $Name -Exclude "*RemoteSetup*", "*SafeNet*" -ErrorAction SilentlyContinue
+                        "*Managed Antivirus*", "*ReasonLabs*", "Bitdefender", "bdkitinstaller", "bdlogging", "*Cisco*", "*Cybereason*", "*ITbrain*", "*Datto*", "*Infocyte*", "*CentraStage*" #,"*N-able*"
+                    $Folders = Get-Item -Path 'C:\Program Files\*', 'C:\Program Files (x86)\*', 'C:\ProgramData\*' -Include $Name -Exclude "*RemoteSetup*", "*SafeNet*", "*cisco spark*" -ErrorAction SilentlyContinue
                     $AV_Folders = $Folders | Select-Object @{n = 'FolderName'; e = { $_.Name } }, @{n = 'FullPath'; e = { $_.FullName } }, CreationTime
                     if ($DeleteAVFolders) {
                         if (!$AV_Folders) {
@@ -1677,7 +1705,13 @@ function Get-AVInfo {
                     if ($UIStatus -eq 1) {
                         Write-Host -ForegroundColor Cyan "`nWindows Defender UI is locked down"
                     }
-                    if ($TPStatus -eq $true -or $TPStatus -eq 1) {
+                    if (($TPStatus -eq $true) -or ($TPStatus -eq 1) -or ($TPStatus -eq 5)) {
+                        <#
+                        0: Tamper Protection is off. Cloud-delivered protection is also off.
+                        1: Tamper Protection is on. Cloud-delivered protection is off.
+                        4: Tamper Protection is off. Cloud-delivered protection is on.
+                        5: Tamper Protection is on. Cloud-delivered protection is on. 
+                        #>
                         Write-Host -ForegroundColor Cyan "Windows Defender Tamper Protection is enabled (configurable from the Windows Security app only)"
                     }
                     if ($SentinelOneTamperProtection) {
@@ -1743,5 +1777,4 @@ function Get-AVInfo {
     END {
         Write-Verbose "[END  ] Ending: $($MyInvocation.MyCommand)"
     }
-    
 } # function Get-AVInfo
