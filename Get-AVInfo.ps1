@@ -59,10 +59,12 @@ function Get-AVInfo {
     Unregisters AVs from the Windows Security Center using WMI.
     .PARAMETER UnregisterWebroot
     Unregisters Webroot from the Windows Security Center.
-    .PARAMETER UninstallWebroot
+    .PARAMETER UninstallWebroot_MSI
     Uninstalls Webroot by installing an MSI on top of the existing install then uninstalling with the same MSI right after.
-    .PARAMETER UninstallWebroot1
+    .PARAMETER UninstallWebroot_Legacy
     Uninstalls older Webroot software using the CleanWDF tool.
+    .PARAMETER UninstallWebroot_OpenText
+    Uninstalls OpenText Webroot using the built-in uninstaller.
     .PARAMETER HPWolfUninstall
     Uninstalls HP Wolf Security products, in a specific order, to avoid issues with the uninstallation process.
     .PARAMETER OpenIE
@@ -320,11 +322,15 @@ function Get-AVInfo {
 
         [Parameter(parametersetname = 'Webroot_Action',
             Mandatory = $false)]
-        [Switch]$UninstallWebroot,
+        [Switch]$UninstallWebroot_MSI,
         
         [Parameter(parametersetname = 'Webroot_Action',
             Mandatory = $false)]
-        [Switch]$UninstallWebroot1,
+        [Switch]$UninstallWebroot_Legacy,
+        
+        [Parameter(parametersetname = 'Webroot_Action',
+            Mandatory = $false)]
+        [Switch]$UninstallWebroot_OpenText,
 
         [Parameter(parametersetname = 'HP_Wolf_Action',
             Mandatory = $false)]
@@ -344,10 +350,10 @@ function Get-AVInfo {
         [Switch]$RebootStatus
     )
 
-    BEGIN {
+    begin {
         Write-Verbose "[BEGIN  ] Starting: $($MyInvocation.MyCommand)"
     }
-    PROCESS {
+    process {
         # Write-Debug "Started PROCESS block"
         function UninstallApp {
             [CmdletBinding()]
@@ -359,7 +365,7 @@ function Get-AVInfo {
                 "HKLM:\SOFTWARE\Wow6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*",
                 "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*"
             )
-            $Apps = Get-ItemProperty $RegUninstallPath -ErrorAction SilentlyContinue | Where-Object DisplayName -like "*$($Name)*"
+            $Apps = Get-ItemProperty $RegUninstallPath -ErrorAction SilentlyContinue | Where-Object DisplayName -Like "*$($Name)*"
             if (!$Apps) {
                 Write-Host "$Name is not installed.`nExiting."
             } # if !$Apps
@@ -471,16 +477,16 @@ function Get-AVInfo {
                         Write-Host "Vipre definitions are not currently being updated."                        
                     }
                     else {
-                        While ((Get-ChildItem "C:\Program Files (x86)\VIPRE Business Agent\Definitions\Beetle\*" -ErrorAction SilentlyContinue).Name -like "*_PENDING*" ) {
+                        while ((Get-ChildItem "C:\Program Files (x86)\VIPRE Business Agent\Definitions\Beetle\*" -ErrorAction SilentlyContinue).Name -like "*_PENDING*" ) {
                             Write-Host -ForegroundColor Green "Vipre definitions are updating. Please wait.."; Start-Sleep -Seconds 2
                         }
                     }
                 } # if $VipreUpdateCheck
                 if ($RenameDefsFolder) {
                     # Checking for admin rights
-                    if (-NOT ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
+                    if (-not ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole] "Administrator")) {
                         Write-Warning "Renaming the definitions folder must be done from an admin shell. Please launch an admin shell and try again."
-                        Break
+                        break
                     }
                     Write-Verbose "Checking for presence of the definitions folder"
                     if (!(Test-Path 'C:\Program Files*\VIPRE Business Agent\Definitions')) {
@@ -508,7 +514,7 @@ function Get-AVInfo {
                         }
                         elseif ($Answer -eq 'N') {
                             Write-Host "Not running the Vipre Removal Tool.`nClosing."
-                            Break
+                            break
                         }
                     }
                     else {
@@ -915,8 +921,13 @@ function Get-AVInfo {
                 # uninstall Cisco Secure Endpoint using the built-in uninstaller
                 # https://www.cisco.com/c/en/us/support/docs/security/amp-endpoints/215704-installation-and-configuration-of-amp-co.html
                 Write-Host -ForegroundColor Green "Uninstalling Cisco Secure Endpoint"
-                $uninstallPath = Get-ChildItem -Path "C:\Program Files\Cisco\AMP" -Directory | Where-Object { $_.Name -match "^\d+\.\d+\.\d+\.\d+$" } | Select-Object -ExpandProperty FullName | ForEach-Object { Join-Path -Path $_ -ChildPath "uninstall.exe" }
-                Start-Process $uninstallPath -ArgumentList "/R /S /remove 1"
+                $uninstallPath = Get-ChildItem -Path "C:\Program Files\Cisco\AMP" -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -match "^\d+\.\d+\.\d+\.\d+$" } | Select-Object -ExpandProperty FullName | ForEach-Object { Join-Path -Path $_ -ChildPath "uninstall.exe" }
+                if ($uninstallPath) {
+                    Start-Process $uninstallPath -ArgumentList "/R /S /remove 1"
+                }
+                else {
+                    Write-Host "Cisco Secure Endpoint uninstall executable not found. Exiting script."
+                }
             } # if parameterSet 'Cisco_Action'            
             'Malwarebytes_Action' {
                 # for uninstalling Malwarebytes using the built-in uninstaller
@@ -1005,7 +1016,7 @@ function Get-AVInfo {
                     $AVP
                     $ASP
                 }
-                if ($UninstallWebroot) {
+                if ($UninstallWebroot_MSI) {
                     # for uninstalling webroot by installing with an msi on top of the existing install then uninstalling with the same msi right after
                     Write-Host -ForegroundColor Green "Downloading Webroot installer"
                     Invoke-WebRequest -Uri 'http://anywhere.webrootcloudav.com/zerol/wsasme.msi' -OutFile 'C:\wsasmi.msi'
@@ -1018,7 +1029,7 @@ function Get-AVInfo {
                     Write-Host -ForegroundColor Green "Uninstall complete. Please wait a minute or two and then check for success including for the now disabled WRSVC service, then manually reboot.`
                     `nYou will typically still need to unregister Webroot from the Windows Security Center as well as get rid of leftover folders manually."
                 }
-                if ($UninstallWebroot1) {
+                if ($UninstallWebroot_Legacy) {
                     # for uninstalling older Webroot software using the CleanWDF tool (when the first method doesn't work)
                     # https://answers.webroot.com/Webroot/ukp.aspx?pid=17&app=vw&vw=1&solutionid=1034&t=SecureAnywhere-You-need-help-uninstalling-legacy-Webroot-software
                     Write-Host -ForegroundColor Green "Downloading Webroot's CleanWDF removal/cleanup tool"
@@ -1028,6 +1039,46 @@ function Get-AVInfo {
                     # deleting the tool
                     Remove-Item 'C:\CleanWDF.exe'
                     Write-Host -ForegroundColor Green "Uninstall Complete. Please reboot."
+                }
+                if ($UninstallWebroot_OpenText) {
+                    # for uninstalling the newer OpenText Webroot using the built-in uninstaller
+                    # https://answers.webroot.com/Webroot/ukp.aspx?pid=17&app=vw&vw=1&solutionid=1101&t=Uninstalling-the-OpenText%E2%84%A2-Core-Endpoint-Protection
+                    Write-Host "Uninstalling OpenText Webroot"
+    
+                    # Determine the correct path based on architecture
+                    $WebrootPath = if ([Environment]::Is64BitOperatingSystem) {
+                        "C:\Program Files (x86)\Webroot\WRSA.exe"
+                    }
+                    else {
+                        "C:\Program Files\Webroot\WRSA.exe"
+                    }
+    
+                    if (Test-Path $WebrootPath) {
+                        Write-Host -ForegroundColor Green "Running Webroot uninstaller"
+                        Start-Process -FilePath $WebrootPath -ArgumentList "-uninstall" -Wait
+        
+                        Write-Host -ForegroundColor Green "Cleaning up Webroot data folders"
+                        $ProgramData = [Environment]::GetFolderPath('CommonApplicationData')
+        
+                        # Remove WRData folder if present
+                        $WRDataPath = Join-Path -Path $ProgramData -ChildPath "WRData"
+                        if (Test-Path $WRDataPath) {
+                            Remove-Item -Path $WRDataPath -Recurse -Force -ErrorAction SilentlyContinue
+                            Write-Host "Removed WRData folder"
+                        }
+        
+                        # Remove WRCore folder if present
+                        $WRCorePath = Join-Path -Path $ProgramData -ChildPath "WRCore"
+                        if (Test-Path $WRCorePath) {
+                            Remove-Item -Path $WRCorePath -Recurse -Force -ErrorAction SilentlyContinue
+                            Write-Host "Removed WRCore folder"
+                        }
+        
+                        Write-Host -ForegroundColor Green "Uninstall complete. Please reboot the computer to complete the process."
+                    }
+                    else {
+                        Write-Warning "Webroot uninstaller not found at expected location: $WebrootPath"
+                    }
                 }
             } # if ParameterSet 'Webroot_Action'
             'HP_Wolf_Action' {
@@ -1115,7 +1166,7 @@ function Get-AVInfo {
                             $AVP
                             $Answer = Read-Host "`nUnregister HP Wolf Security from the Windows Security Center? (Y/N)`n(Only choose 'Y' if the main HP Wolf security products successfully uninstalled.)"
                             if ($Answer -eq 'Y') {
-                                Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct | Where-Object DisplayName -like "*HP Wolf*" | Remove-WmiObject
+                                Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct | Where-Object DisplayName -Like "*HP Wolf*" | Remove-WmiObject
                                 $AVP = (Get-WmiObject -Namespace root\SecurityCenter2 -Class AntiVirusProduct).DisplayName
                                 Write-Host -ForegroundColor Green "`nAVs still registered with the Windows Security Center:"  
                                 $AVP
@@ -1170,12 +1221,12 @@ function Get-AVInfo {
                     Set-ExecutionPolicy Restricted
                 }            
             } # if ParameterSet 'PendingReboot'       
-            Default {
+            default {
                 Write-Verbose -Message "Retrieving AVs by querying services"
                 $Services = Get-Service -DisplayName *vipre*, *SBAMSvc*, *defend*, *trend*, *sophos*, *eset*, *symantec*, *webroot*, *cylance*, *mcafee*, *avg*, *datto*, `
                     *santivirus*, *segurazo*, *avira*, *norton*, *malware*, *kaspersky*, *sentinel*, *avast*, *spyware*, *spybot*, *WRCoreService*, *WRSkyClient*, *WRSVC*, `
-                    *WRSMSVC*, *CrowdStrike*, *Rapport*, *Reason*, '*Cisco Secur*', '*HP Sure*', 'HP Security Update Service', '*SAS Core*', "360 Total Security" `
-                    -Exclude *firewall*, '*AMD Crash*', '*LDK License Manager', '*Sophos Connect*', '*Avast SecureLine VPN*', '*browser*', '*%1!s! Update Service*' -ErrorAction SilentlyContinue
+                    *WRSMSVC*, *CrowdStrike*, *Rapport*, *Reason*, '*Cisco Secure Endpoint*', '*HP Sure*', 'HP Security Update Service', '*SAS Core*', "360 Total Security" `
+                    -Exclude *firewall*, '*AMD Crash*', '*sensor reset*', '*LDK License Manager', '*Sophos Connect*', '*Avast SecureLine VPN*', '*browser*', '*%1!s! Update Service*' -ErrorAction SilentlyContinue
                 # , '*Take Control Agent*', '*N-able Remote*'
         
                 Write-Verbose -Message "Retrieving AVs registered with the Windows Security Center (by querying WMI)"
@@ -1587,7 +1638,7 @@ function Get-AVInfo {
                             }
                         }
                         Write-Output $Processes | Format-Table `
-                        @{n = "ServiceName"; e = { ($WMI_Services | Where-Object ProcessID -eq ($_.Id)).Name } },
+                        @{n = "ServiceName"; e = { ($WMI_Services | Where-Object ProcessID -EQ ($_.Id)).Name } },
                         @{n = "ProcessName"; e = { $_.Name } }, 
                         @{n = "ProcessID"; e = { $_.Id } }, 
                         StartTime, Company -AutoSize    
@@ -1774,7 +1825,7 @@ function Get-AVInfo {
             } # Default
         } # switch
     } # PROCESS
-    END {
+    end {
         Write-Verbose "[END  ] Ending: $($MyInvocation.MyCommand)"
     }
 } # function Get-AVInfo
