@@ -107,9 +107,11 @@ function Get-AVInfo {
     .OUTPUTS
     Various. The script outputs information about the AVs installed on the system, as well as other relevant information.
     .NOTES
-    This script can be run on a machine in Automate, backstage. Simply paste the contents of this function into the shell and press enter, to load the script into memory. Then, just run 'Get-AVInfo', along with whatever parameters, if any, you want to add.
+    This script can be run on a machine in Automate, backstage, or in a Ninja PowerShell session. Simply paste the contents of this function into the shell and press enter, to load the script into memory. Then, just run 'Get-AVInfo', along with whatever parameters, if any, you want to add.
     You can also run the code below to download and load the script into memory:
     "wget -uri 'https://raw.githubusercontent.com/IntelliScripts/Get-AVInfo/master/Get-AVInfo.ps1' -UseBasicParsing | iex"
+    The above command with an added check for the download containing the expected text (to account for cases where the download is blocked by filters such as DNSFilter) before attempting to load the function in the shell:
+    "$c = wget -uri 'https://raw.githubusercontent.com/IntelliScripts/Get-AVInfo/master/Get-AVInfo.ps1' -UseBasicParsing; if ($c.Content -match 'function Get-AVInfo') { $c | iex } else { 'Failed to retrieve script' }"
     # For machines that do not support wget (e.g., older PowerShell versions), use:
     "(New-Object Net.WebClient).DownloadString('https://raw.githubusercontent.com/IntelliScripts/Get-AVInfo/master/Get-AVInfo.ps1') | iex"
     If you get an error "The request was aborted: Could not create SSL/TLS secure channel.", run this command first: 
@@ -898,6 +900,7 @@ function Get-AVInfo {
                 }
             } # if ParameterSet 'McAfee_Action'
             'Sophos_Action' {
+                # https://support.sophos.com/support/s/article/KBA-000003469?language=en_US
                 # For Windows 10 (x64) and Windows Server 2016 and later running a supported Core Agent
                 $sophosUninstallPath = 'C:\Program Files\Sophos\Sophos Endpoint Agent\SophosUninstall.exe'
                 # For legacy platforms
@@ -905,12 +908,12 @@ function Get-AVInfo {
                 # $uninstallGUIPath = 'C:\Program Files\Sophos\Sophos Endpoint Agent\uninstallgui.exe'
 
                 if (Test-Path $sophosUninstallPath) {
-                    Write-Host -ForegroundColor Green "Running Sophos uninstaller at: $sophosUninstallPath"
+                    Write-Host -ForegroundColor Green "Running Sophos uninstaller for legacy platforms at: $sophosUninstallPath"
                     Start-Process -FilePath $sophosUninstallPath -ArgumentList '--quiet' -Wait
                 }
                 elseif (Test-Path $uninstallCliPath) {
                     Write-Host -ForegroundColor Green "Running Sophos uninstallcli at: $uninstallCliPath"
-                    & $uninstallCliPath
+                    Start-Process -FilePath $uninstallCliPath -ArgumentList '--quiet' -Wait
                 }
                 else {
                     Write-Host -ForegroundColor Green "Cannot find the Sophos uninstaller.`nExiting script."
@@ -1018,9 +1021,14 @@ function Get-AVInfo {
                 }
                 if ($UninstallWebroot_MSI) {
                     # for uninstalling webroot by installing with an msi on top of the existing install then uninstalling with the same msi right after
-                    Write-Host -ForegroundColor Green "Downloading Webroot installer"
-                    Invoke-WebRequest -Uri 'http://anywhere.webrootcloudav.com/zerol/wsasme.msi' -OutFile 'C:\wsasmi.msi'
-                    Write-Host -ForegroundColor Green "Installing Webroot"
+                    if (!Test-Path 'C:\wsasmi.msi') {
+                        Write-Host -ForegroundColor Green "Downloading Webroot installer"
+                        Invoke-WebRequest -Uri 'http://anywhere.webrootcloudav.com/zerol/wsasme.msi' -OutFile 'C:\wsasmi.msi'            
+                    }
+                    else {
+                        Write-Host -ForegroundColor Green "Webroot installer already present at C:\wsasmi.msi."
+                    }
+                    Write-Host -ForegroundColor Green "Proceeding with install/uninstall"
                     Start-Process msiexec.exe '/i "C:\wsasmi.msi" /quiet /norestart' -Wait
                     Write-Host -ForegroundColor Green "Uninstalling Webroot"
                     Start-Process msiexec.exe '/x "C:\wsasmi.msi" /quiet /norestart' -Wait
@@ -1045,13 +1053,12 @@ function Get-AVInfo {
                     # https://answers.webroot.com/Webroot/ukp.aspx?pid=17&app=vw&vw=1&solutionid=1101&t=Uninstalling-the-OpenText%E2%84%A2-Core-Endpoint-Protection
                     Write-Host "Uninstalling OpenText Webroot"
     
-                    # Determine the correct path based on architecture
-                    $WebrootPath = if ([Environment]::Is64BitOperatingSystem) {
-                        "C:\Program Files (x86)\Webroot\WRSA.exe"
-                    }
-                    else {
+                    # Determine the correct path
+                    $WebrootPaths = @(
+                        "C:\Program Files (x86)\Webroot\WRSA.exe",
                         "C:\Program Files\Webroot\WRSA.exe"
-                    }
+                    )
+                    $WebrootPath = $WebrootPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
     
                     if (Test-Path $WebrootPath) {
                         Write-Host -ForegroundColor Green "Running Webroot uninstaller"
@@ -1077,7 +1084,7 @@ function Get-AVInfo {
                         Write-Host -ForegroundColor Green "Uninstall complete. Please reboot the computer to complete the process."
                     }
                     else {
-                        Write-Warning "Webroot uninstaller not found at expected location: $WebrootPath"
+                        Write-Warning "Webroot uninstaller not found at expected locations: $($WebrootPaths -join ', ')"
                     }
                 }
             } # if ParameterSet 'Webroot_Action'
@@ -1523,10 +1530,8 @@ function Get-AVInfo {
                 # If SentinelOne is present, check for SentinelOne tamper protection
                 if (Test-Path 'C:\Program Files\SentinelOne' -PathType Container) {
                     Write-Verbose "Checking SentinelOne tamper protection status"
-                    
-                    $TamperProtection = & 'C:\Program Files\SentinelOne\Sentinel Agent*\sentinelctl.exe' configure | Select-String -Pattern "agent.antiTampering", "agent.safeBootProtection"
-                    
-                    $TamperProtection = & 'C:\Program Files\SentinelOne\Sentinel Agent*\sentinelctl.exe' configure | 
+                    <#
+                        $TamperProtection = & 'C:\Program Files\SentinelOne\Sentinel Agent*\sentinelctl.exe' configure | 
                     Select-String -Pattern "agent.antiTampering", "agent.safeBootProtection" | 
                     ForEach-Object {
                         # Split the line into key and value, then trim and format
@@ -1537,6 +1542,32 @@ function Get-AVInfo {
                     if ($TamperProtection) {
                         $SentinelOneTamperProtection = $true
                     }    
+                        #>
+                    
+                    $SentinelOneExe = Get-ChildItem 'C:\Program Files\SentinelOne\Sentinel Agent*\sentinelctl.exe' -File -ErrorAction SilentlyContinue | 
+                    Select-Object -First 1 -ExpandProperty FullName
+                    
+                    if ($SentinelOneExe) {
+                        # The string casting and usage of cmd.exe and 2>&1 is necessary to capture the output of sentinelctl.exe configure, which writes to stderr instead of stdout, even when the command executes successfully.
+                        [string[]]$configOutput = cmd.exe /c "$SentinelOneExe" configure 2>&1
+                        
+                        $TamperProtection = $configOutput |
+                        Select-String -Pattern "agent.antiTampering", "agent.safeBootProtection" | 
+                        ForEach-Object {
+                            # Split the line into key and value, then trim and format
+                            $Parts = $_.Line -split '\s{2,}' # Split on two or more spaces
+                            "{0,-30} {1}" -f $Parts[0].Trim(), $Parts[1].Trim()
+                        }
+                        
+                        if ($TamperProtection) {
+                            $SentinelOneTamperProtection = $true
+                        }
+                        else {
+                            # If no tamper protection settings found, store full output for display
+                            $SentinelOneTamperProtection = $true
+                            $TamperProtection = $configOutput
+                        }
+                    }
                 } # if SentinelOne present
                 
             
