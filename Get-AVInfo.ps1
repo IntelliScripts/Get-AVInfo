@@ -1021,7 +1021,7 @@ function Get-AVInfo {
                 }
                 if ($UninstallWebroot_MSI) {
                     # for uninstalling webroot by installing with an msi on top of the existing install then uninstalling with the same msi right after
-                    if (!Test-Path 'C:\wsasmi.msi') {
+                    if (!(Test-Path 'C:\wsasmi.msi')) {
                         Write-Host -ForegroundColor Green "Downloading Webroot installer"
                         Invoke-WebRequest -Uri 'http://anywhere.webrootcloudav.com/zerol/wsasme.msi' -OutFile 'C:\wsasmi.msi'            
                     }
@@ -1061,7 +1061,7 @@ function Get-AVInfo {
                     $WebrootPath = $WebrootPaths | Where-Object { Test-Path $_ } | Select-Object -First 1
     
                     if (Test-Path $WebrootPath) {
-                        Write-Host -ForegroundColor Green "Running Webroot uninstaller"
+                        Write-Host -ForegroundColor Green "Running Webroot uninstaller.."
                         Start-Process -FilePath $WebrootPath -ArgumentList "-uninstall" -Wait
         
                         Write-Host -ForegroundColor Green "Cleaning up Webroot data folders"
@@ -1232,7 +1232,7 @@ function Get-AVInfo {
                 Write-Verbose -Message "Retrieving AVs by querying services"
                 $Services = Get-Service -DisplayName *vipre*, *SBAMSvc*, *defend*, *trend*, *sophos*, *eset*, *symantec*, *webroot*, *cylance*, *mcafee*, *avg*, *datto*, `
                     *santivirus*, *segurazo*, *avira*, *norton*, *malware*, *kaspersky*, *sentinel*, *avast*, *spyware*, *spybot*, *WRCoreService*, *WRSkyClient*, *WRSVC*, `
-                    *WRSMSVC*, *CrowdStrike*, *Rapport*, *Reason*, '*Cisco Secure Endpoint*', '*HP Sure*', 'HP Security Update Service', '*SAS Core*', "360 Total Security" `
+                    *WRSMSVC*, *CrowdStrike*, *Rapport*, *Reason*, '*f-secure*', '*Cisco Secure Endpoint*', '*HP Sure*', 'HP Security Update Service', '*SAS Core*', "360 Total Security" `
                     -Exclude *firewall*, '*AMD Crash*', '*sensor reset*', '*LDK License Manager', '*Sophos Connect*', '*Avast SecureLine VPN*', '*browser*', '*%1!s! Update Service*' -ErrorAction SilentlyContinue
                 # , '*Take Control Agent*', '*N-able Remote*'
         
@@ -1617,7 +1617,7 @@ function Get-AVInfo {
                 if ($AVFolders -or $DeleteAVFolders) {
                     Write-Verbose "Looking for AV folders"
                     $Name = "*vipre*", "*trend*", "*sophos*", "*symantec*", "*eset*", "*webroot*", "*cylance*", "*mcafee*", "*avg*", "*santivirus*", "*segurazo*", "*avira*", "*norton*", `
-                        "*malware*", "*kaspersky*", "*sentinel*", "*avast*", "*spyware*", "*spybot*", "*WRCore*", "*WRData*", "*Trusteer*", "*SuperAntiSpyware*", "*CrowdStrike*", `
+                        "*malware*", "*kaspersky*", "*sentinel*", "*avast*", "*spyware*", "*spybot*", "*WRCore*", "*WRData*", "*Trusteer*", "*SuperAntiSpyware*", "*CrowdStrike*", "*F-Secure*", "*Charter Security Suite*", `
                         "*Managed Antivirus*", "*ReasonLabs*", "Bitdefender", "bdkitinstaller", "bdlogging", "*Cisco*", "*Cybereason*", "*ITbrain*", "*Datto*", "*Infocyte*", "*CentraStage*" #,"*N-able*"
                     $Folders = Get-Item -Path 'C:\Program Files\*', 'C:\Program Files (x86)\*', 'C:\ProgramData\*' -Include $Name -Exclude "*RemoteSetup*", "*SafeNet*", "*cisco spark*" -ErrorAction SilentlyContinue
                     $AV_Folders = $Folders | Select-Object @{n = 'FolderName'; e = { $_.Name } }, @{n = 'FullPath'; e = { $_.FullName } }, CreationTime
